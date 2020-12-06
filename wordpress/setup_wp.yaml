@@ -1,0 +1,89 @@
+---
+
+- hosts: wp_nodes
+  become: yes
+  vars:
+    my_fav_packages:
+      - cowsay
+      - mc
+      - git
+      - unzip
+    wp_download_url: https://wordpress.org/latest-pl_PL.zip
+    wp_dest_dir: /var/www/blog
+    db_name: 'blog'
+    db_user: 'bloger'
+    db_passwd: 'bloger!'
+    epel_repo_rpm_url: https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+    remi_repo_rpm_url: https://rpms.remirepo.net/enterprise/remi-release-7.rpm
+  tasks:
+    - name: "install repo epel"
+      yum: 
+        name: "{{ epel_repo_rpm_url }}"
+        state: present
+    - name: "fav packages"
+      yum:
+        name: "{{ my_fav_packages }}"
+        state: latest
+      become: yes
+    - name: "download wp"
+      get_url: 
+        url: "{{ wp_download_url }}"
+        dest: /tmp/wordpress.zip
+    - name: "dir exists"
+      file: 
+        path: "{{ wp_dest_dir }}"
+        state: directory
+      become: yes
+    - name: "unarchive wp"
+      unarchive: 
+        src: /tmp/wordpress.zip
+        dest: "{{ wp_dest_dir }}"
+        remote_src: yes
+      become: yes
+    - name: "mariadb repo cfg"
+      copy: 
+        src: files/MariaDB.repo
+        dest: /etc/yum.repos.d/MariaDB.repo
+    - name: "install mariadb"
+      yum: 
+        name: 
+          - MariaDB-server
+          - MariaDB-client
+        state: present
+    - name: "start server mariadb"
+      service: 
+        name: mariadb
+        state: started
+    - name: "create blog db"
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: present
+    - name: "create user for db"
+        community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_passwd }}"
+        priv: "{{ db_name ~ '.*:ALL' }}"
+        state: present
+    - name: "wp cfg"
+      copy:
+        src: files/wp-config.php
+        dest: "{{ wp_dest_dir ~ '/wordpress/wp-config.php' }}"
+    - name: "install php repo"
+      yum: 
+        name: "{{ remi_repo_rpm_url }}"
+        state: latest
+    - name: "install php packages"
+      yum:
+        name:
+          - php74
+          - php74-php
+          - php74-php-mysqlnd
+          - php74-pecl-mysql
+    - name: "install http server"
+      yum:
+        name: httpd
+        state: latest
+    - name: "http server restart"
+      service:
+        name: httpd
+        state: restarted
